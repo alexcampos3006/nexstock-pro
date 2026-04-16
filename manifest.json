@@ -1,0 +1,9 @@
+{
+  "name": "NexStock Pro",
+  "short_name": "NexStock",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#060d1a",
+  "theme_color": "#060d1a",
+  "icons": [{"src": "icon.png","sizes": "512x512","type": "image/png"}]
+}
