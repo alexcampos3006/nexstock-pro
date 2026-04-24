@@ -1,0 +1,115 @@
+  /* --- VOZ CADASTRO - CAMPO POR CAMPO --- */
+  _campos:[
+    {id:'c-nm',label:'o nome da materia-prima',tipo:'texto'},
+    {id:'c-lt',label:'os digitos do lote',tipo:'numero'},
+    {id:'c-vl',label:'a validade, fale dia mes e ano',tipo:'data'},
+    {id:'c-qt',label:'a quantidade em numero',tipo:'numero'},
+    {id:'c-mn',label:'o estoque minimo',tipo:'numero'}
+  ],
+  _ci:0,
+
+  vozCampo:function(){
+    if(!State.temVoz()){U.toast('Voz disponivel no Plus e Pro','wn');return}
+    this._ci=0;
+    this._limpar();
+    document.getElementById('voz-cad-st').classList.add('on');
+    this._ouvir();
+  },
+
+  _ouvir:function(){
+    var self=this;
+    var campo=this._campos[this._ci];
+    if(!campo)return;
+    var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+    if(!SR){U.toast('Use o Google Chrome para voz','wn');return}
+    var btn=document.getElementById('btn-voz-cad');
+    var st=document.getElementById('voz-cad-st');
+    btn.classList.add('on');
+    btn.textContent='Ouvindo campo '+(this._ci+1)+'/5...';
+    st.textContent='Fale '+(this._ci+1)+'/5: '+campo.label;
+    U.falar('Fale '+campo.label);
+    var r=new SR();
+    r.lang='pt-BR';
+    r.continuous=false;
+    r.interimResults=false;
+    r.maxAlternatives=1;
+    State.recog=r;
+    var processado=false;
+    r.onresult=function(e){
+      if(processado)return;
+      processado=true;
+      var txt=e.results[0][0].transcript.trim();
+      self._preencher(campo,txt);
+    };
+    r.onerror=function(e){
+      btn.classList.remove('on');
+      btn.textContent='Preencher por Voz';
+      if(e.error==='not-allowed')U.toast('Permita o microfone no Chrome','wn');
+      else st.textContent='Erro. Toque em Preencher por Voz para tentar de novo.';
+    };
+    r.onend=function(){
+      State.recog=null;
+      btn.classList.remove('on');
+      btn.textContent='Preencher por Voz';
+    };
+    r.start();
+  },
+
+  _preencher:function(campo,txt){
+    var st=document.getElementById('voz-cad-st');
+    var val='';
+    if(campo.tipo==='texto'){
+      val=U.cap(txt);
+      document.getElementById(campo.id).value=val;
+    } else if(campo.tipo==='numero'){
+      var n=parseFloat(txt.replace(/[^0-9,.]/g,'').replace(',','.'));
+      if(!isNaN(n)&&n>=0){
+        val=n;document.getElementById(campo.id).value=n;
+      } else {
+        st.textContent='Nao entendi "'+txt+'". Toque para tentar este campo de novo.';
+        return;
+      }
+    } else if(campo.tipo==='data'){
+      var nums=txt.match(/[0-9]+/g);
+      var mesesMap={janeiro:'01',fevereiro:'02',marco:'03',abril:'04',maio:'05',junho:'06',
+        julho:'07',agosto:'08',setembro:'09',outubro:'10',novembro:'11',dezembro:'12'};
+      var tl=txt.toLowerCase().replace(/ç/g,'c').replace(/ã/g,'a').replace(/é/g,'e');
+      var d='',mo='',a='';
+      for(var mes in mesesMap){
+        if(tl.indexOf(mes)>=0){
+          mo=mesesMap[mes];
+          if(nums){d=(nums[0]||'01').padStart(2,'0');a=nums.length>1?nums[nums.length-1]:(new Date().getFullYear()+1)+'';}
+          break;
+        }
+      }
+      if(!mo&&nums&&nums.length>=3){
+        d=nums[0].padStart(2,'0');mo=nums[1].padStart(2,'0');a=nums[2].length===2?'20'+nums[2]:nums[2];
+      } else if(!mo&&nums&&nums.length===2){
+        mo=nums[0].padStart(2,'0');a=nums[1].length===2?'20'+nums[1]:nums[1];d='01';
+      }
+      if(d&&mo&&a){
+        document.getElementById(campo.id).value=a+'-'+mo+'-'+d;
+        val=d+'/'+mo+'/'+a;
+      } else {
+        st.textContent='Nao entendi a data. Fale: 30 06 2026';
+        return;
+      }
+    }
+    st.textContent='OK '+(this._ci+1)+'/5: '+val+' confirmado!';
+    U.falar('Confirmado: '+val);
+    this._ci++;
+    var self=this;
+    if(this._ci<this._campos.length){
+      setTimeout(function(){self._ouvir()},1000);
+    } else {
+      st.textContent='Todos os campos preenchidos! Confira e toque em Cadastrar.';
+      U.falar('Pronto! Confira e toque em cadastrar.');
+    }
+  },
+
+  vozParar:function(){
+    State.vozCadAtiva=false;
+    if(State.recog){try{State.recog.stop()}catch(e){}State.recog=null}
+    var btn=document.getElementById('btn-voz-cad');
+    if(btn){btn.classList.remove('on');btn.textContent='Preencher por Voz'}
+  }
