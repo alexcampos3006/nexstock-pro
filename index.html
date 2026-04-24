@@ -697,11 +697,13 @@ var Lic={
     if(raw.length!==16||raw.slice(0,4)!=='NEXS')return null;
     var cod=raw.slice(4,6);
     var plano=this.PLANS[cod];if(!plano)return null;
-    // Novo formato: NEXS(4)+COD(2)+YY(2)+MM(2)+RAND(2)+CHK(4)
-    var yy=raw.slice(6,8),mm=raw.slice(8,10),rand=raw.slice(10,12),chk=raw.slice(12,16);
-    var base=cod+yy+mm+rand;
-    if(chk!==this._chk(base))return null;
-    var exp=new Date(2000+parseInt(yy),parseInt(mm)-1,28,23,59,59);
+    var dat=raw.slice(6,12);  // YYMMDD
+    var chk=raw.slice(12,16);
+    if(chk!==this._chk(cod+dat))return null;
+    var yy=parseInt(dat.slice(0,2));
+    var mm=parseInt(dat.slice(2,4))-1;
+    var dd=parseInt(dat.slice(4,6));
+    var exp=new Date(2000+yy,mm,dd,23,59,59);
     if(exp<new Date())return{expired:true,exp:exp,plano:plano};
     return{ok:true,plano:plano,exp:exp};
   }
