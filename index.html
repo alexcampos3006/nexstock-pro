@@ -1064,8 +1064,15 @@ var Cad={
     var val='';
 
     if(campo.tipo==='texto'){
-      // Nome: capitaliza cada palavra
-      val=U.cap(txt);
+      // Remove frases da instrucao que podem vir junto na captura
+      var limpo=txt
+        .replace(/fale\s+o\s+nome\s+da\s+mat[eé]ria[\s\-]?prima\s*/gi,'')
+        .replace(/nome\s+da\s+mat[eé]ria[\s\-]?prima\s*/gi,'')
+        .replace(/mat[eé]ria[\s\-]?prima\s*/gi,'')
+        .replace(/fale\s+o\s+nome\s*/gi,'')
+        .replace(/fale\s*/gi,'')
+        .trim();
+      val=U.cap(limpo||txt);
       document.getElementById(campo.id).value=val;
 
     } else if(campo.tipo==='numero'){
