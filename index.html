@@ -382,6 +382,20 @@ body{font-family:var(--f);color:var(--tx);max-width:430px;margin:0 auto;position
 .vazio{text-align:center;padding:40px 16px;color:var(--tx2)}
 .vazio-ic{font-size:2.4rem;margin-bottom:10px}
 .vazio p{font-size:.84rem;line-height:1.5}
+
+/* ── LOGIN USUARIO ── */
+#pg-login{align-items:center;justify-content:center;padding:28px 20px;flex-direction:column;background:var(--bg);overflow-y:auto}
+.login-card{background:var(--card);border:1px solid var(--bord);border-radius:20px;padding:28px 22px;width:100%;max-width:380px}
+.login-ic{font-size:2.4rem;text-align:center;margin-bottom:12px}
+.login-title{font-size:1.1rem;font-weight:800;text-align:center;margin-bottom:4px}
+.login-sub{font-size:.82rem;color:var(--tx2);text-align:center;margin-bottom:20px;line-height:1.5}
+.login-err{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:10px 14px;font-size:.82rem;color:var(--dn);margin-bottom:12px;display:none}
+.login-err.on{display:block}
+.btn-login{display:block;width:100%;padding:15px;border:none;border-radius:10px;font-family:var(--f);font-weight:800;font-size:1rem;cursor:pointer;color:#fff;background:linear-gradient(135deg,var(--bl),var(--bll));box-shadow:0 6px 22px rgba(21,87,212,.4);margin-bottom:10px}
+.login-usuarios{display:flex;flex-direction:column;gap:8px;margin-top:16px;border-top:1px solid var(--bord);padding-top:14px}
+.login-u-title{font-size:.7rem;font-weight:700;color:var(--tx2);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px}
+.login-u-item{background:var(--s1);border-radius:8px;padding:10px 13px;font-size:.82rem;color:var(--tx2)}
+
 </style>
 </head>
 <body>
@@ -491,6 +505,30 @@ body{font-family:var(--f);color:var(--tx);max-width:430px;margin:0 auto;position
   </div>
 </div>
 
+<!-- ══ LOGIN USUARIO ══ -->
+<div class="pg" id="pg-login">
+  <div class="login-card">
+    <div class="login-ic">👤</div>
+    <div class="login-title">Identificação do Usuário</div>
+    <div class="login-sub">Digite sua senha de usuário para acessar o sistema.</div>
+    <div class="login-err" id="login-err"></div>
+    <div class="campo">
+      <label>Seu Nome</label>
+      <input class="fi" id="login-nome" type="text" placeholder="Ex: Ana, João..." autocomplete="off">
+    </div>
+    <div class="campo">
+      <label>Senha do Usuário</label>
+      <input class="fi" id="login-senha" type="password" placeholder="Digite sua senha" autocomplete="off"
+        onkeydown="if(event.key==='Enter')Login.entrar()">
+    </div>
+    <button class="btn-login" onclick="Login.entrar()">🔓 Entrar</button>
+    <div class="login-usuarios">
+      <div class="login-u-title">ℹ️ Cada funcionário tem sua própria senha</div>
+      <div class="login-u-item">As senhas são fornecidas pelo administrador da farmácia.</div>
+    </div>
+  </div>
+</div>
+
 <!-- ══════════ APP ══════════ -->
 <div class="pg" id="pg-app">
   <div class="topbar">
@@ -499,6 +537,7 @@ body{font-family:var(--f);color:var(--tx);max-width:430px;margin:0 auto;position
       <div id="farm-nome" onclick="UI.editarNome()" style="font-size:.65rem;color:var(--or);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Toque para informar o nome da farmácia</div>
     </div>
     <div class="tb-plan" id="tb-plan" onclick="UI.irIntro()">🚀 Pró</div>
+    <button class="tb-btn" onclick="UI.trocarUsuario()" title="Trocar usuário" style="font-size:.75rem;width:auto;padding:0 8px">👤</button>
     <button class="tb-btn" onclick="UI.sair()" title="Sair">⏻</button>
   </div>
 
@@ -791,6 +830,17 @@ var UI={
     }
     if(t==='mov'){Mov.renderList();document.getElementById('mov-busca').value=''}
     if(t==='al'){Alertas.render()}
+  },
+
+  trocarUsuario:function(){
+    Store.del('nx_user');
+    var senhas=Store.get('nx_senhas');
+    if(senhas&&senhas.length){
+      this.show('pg-login');
+      document.getElementById('login-nome').value='';
+      document.getElementById('login-senha').value='';
+      document.getElementById('login-err').classList.remove('on');
+    }
   },
 
   editarNome:function(){
@@ -1444,6 +1494,42 @@ var Voz={
     msg='Nao entendi. Diga: "estoque de Dipirona", "entrada 500 gramas Dipirona", "saida 100 gramas Cafeina" ou "alertas".';
     resp.textContent=msg;resp.classList.add('on');
     document.getElementById('voz-p-st').textContent='Tente novamente';
+  }
+};
+
+
+/* ═══════════════════════════════════════════════
+   LOGIN DE USUARIO
+═══════════════════════════════════════════════ */
+var Login={
+  // Verifica se senha bate com lista de senhas do plano
+  entrar:function(){
+    var nome=document.getElementById('login-nome').value.trim();
+    var senha=document.getElementById('login-senha').value.trim().toUpperCase();
+    var err=document.getElementById('login-err');
+
+    if(!nome){err.textContent='Informe seu nome.';err.classList.add('on');return}
+    if(!senha){err.textContent='Informe sua senha.';err.classList.add('on');return}
+
+    var senhas=Store.get('nx_senhas');
+    if(!senhas||!senhas.length){
+      // Sem senhas cadastradas - admin entra direto
+      err.classList.remove('on');
+      Store.set('nx_user',{nome:nome,admin:true});
+      UI._abrirApp();
+      return;
+    }
+
+    var encontrou=senhas.find(function(s){return s.senha===senha});
+    if(!encontrou){
+      err.textContent='Senha incorreta. Verifique com o administrador.';
+      err.classList.add('on');return;
+    }
+
+    err.classList.remove('on');
+    Store.set('nx_user',{nome:nome,senha:senha,nivel:encontrou.nivel});
+    U.toast('Bem-vindo, '+nome+'! 👋','ok');
+    UI._abrirApp();
   }
 };
 
