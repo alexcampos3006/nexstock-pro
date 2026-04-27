@@ -652,9 +652,9 @@ var Store=(function(){
    PLAN CONFIG
 ═══════════════════════════════════════════════ */
 var PLANS={
-  starter:{nome:'Starter',ic:'🌱',lim:30, usr:3, voz:false},
-  plus:   {nome:'Plus',   ic:'⚡',lim:200,usr:5, voz:true},
-  pro:    {nome:'Pró',    ic:'🚀',lim:99999,usr:10,voz:true}
+  starter:{nome:'Starter',ic:'🌱',lim:30,  usr:3,  voz:false},
+  plus:   {nome:'Plus',   ic:'⚡',lim:200, usr:5,  voz:true},
+  pro:    {nome:'Pro',    ic:'🚀',lim:99999,usr:10,voz:true}
 };
 
 /* ═══════════════════════════════════════════════
@@ -678,7 +678,15 @@ var State={
   },
   planInfo:function(){return PLANS[this.plano]||PLANS.starter},
   lim:function(){return this.planInfo().lim},
-  temVoz:function(){return this.planInfo().voz}
+  temVoz:function(){return this.planInfo().voz},
+  nivelVoz:function(){
+    // 'none' = sem voz, 'busca' = so busca, 'full' = busca+cadastro
+    var p=this.plano;
+    if(p==='starter')return 'none';
+    if(p==='plus')return 'busca';
+    if(p==='pro')return 'full';
+    return 'none';
+  }
 };
 
 /* ═══════════════════════════════════════════════
@@ -776,7 +784,11 @@ var UI={
       document.getElementById('tab-'+x).classList.toggle('on',x===t);
       document.getElementById('bn-'+x).classList.toggle('on',x===t);
     });
-    if(t==='ins'){Lista.render();document.getElementById('fab-voz').style.display=State.temVoz()?'':'none'}
+    if(t==='ins'){
+      Lista.render();
+      var nvoz=State.nivelVoz();
+      document.getElementById('fab-voz').style.display=(nvoz==='busca'||nvoz==='full')?'':'none';
+    }
     if(t==='mov'){Mov.renderList();document.getElementById('mov-busca').value=''}
     if(t==='al'){Alertas.render()}
   },
@@ -805,10 +817,13 @@ var UI={
     Store.set('nx_pl',plano);
     var pi=State.planInfo();
     document.getElementById('tb-plan').textContent=pi.ic+' '+pi.nome;
-    // Mostrar/ocultar voz
-    document.getElementById('btn-s-mic').style.display=pi.voz?'':'none';
-    document.getElementById('fab-voz').style.display=pi.voz?'':'none';
-    document.getElementById('btn-voz-cad').style.display=pi.voz?'':'none';
+    // Mostrar/ocultar voz por nivel do plano
+    var nvoz=State.nivelVoz();
+    // Busca: plus e pro
+    document.getElementById('btn-s-mic').style.display=(nvoz==='busca'||nvoz==='full')?'':'none';
+    document.getElementById('fab-voz').style.display=(nvoz==='busca'||nvoz==='full')?'':'none';
+    // Cadastro: so pro
+    document.getElementById('btn-voz-cad').style.display=(nvoz==='full')?'':'none';
     this.show('pg-app');
     this.setTab('ins');
     U.toast('Bem-vindo! Plano '+pi.nome+' ativo 🎉','ok');
@@ -959,7 +974,25 @@ var Cad={
     if(!vl){U.toast('Informe a validade','wn');return}
     // Verificar duplicata (busca normalizada)
     var nnm=U.norm(nm);
-    if(State.prods.some(function(p){return U.norm(p.nm)===nnm})){U.toast('Matéria-prima já cadastrada!','wn');return}
+    var prodExistente=State.prods.find(function(p){return U.norm(p.nm)===nnm});
+    if(prodExistente){
+      if(prodExistente.lt===lt){
+        U.toast('Produto com este lote ja cadastrado!','wn');return;
+      }
+      // Lote diferente - pergunta se quer somar ao estoque
+      if(confirm('Produto ja existe! Deseja adicionar o novo lote '+lt+' e somar '+qt+' '+prodExistente.un+' ao estoque?')){
+        prodExistente.qt=+(prodExistente.qt+qt).toFixed(4);
+        prodExistente.lt=lt;
+        prodExistente.vl=vl;
+        State.hist.push({pr:prodExistente.nm,tp:'en',qt:qt,un:prodExistente.un,
+          dt:new Date().toISOString(),ob:'Novo lote: '+lt});
+        State.save();Cad.fechar();Lista.render();
+        U.toast('Estoque de '+U.cap(nm)+' atualizado! +'+qt+' '+prodExistente.un,'ok');
+        return;
+      } else {
+        return;
+      }
+    }
     State.prods.push({id:Date.now(),nm:U.cap(nm),lt:lt,vl:vl,qt:qt,un:un,mn:mn});
     State.save();this.fechar();Lista.render();
     U.toast('✅ '+U.cap(nm)+' cadastrada!','ok');
@@ -967,14 +1000,14 @@ var Cad={
 
   /* --- VOZ CADASTRO - CAMPO POR CAMPO --- */
   _campos:[
-    {id:'c-nm',label:'o nome da materia-prima',tipo:'texto'},
-    {id:'c-qt',label:'a quantidade em numero',tipo:'numero'},
-    {id:'c-mn',label:'o estoque minimo em numero',tipo:'numero'}
+    {id:'c-nm',label:'o nome da materia prima',tipo:'texto'},
+    {id:'c-qt',label:'a quantidade',tipo:'numero'},
+    {id:'c-mn',label:'o estoque minimo',tipo:'numero'}
   ],
   _ci:0,
 
   vozCampo:function(){
-    if(!State.temVoz()){U.toast('Voz disponivel no Plus e Pro','wn');return}
+    if(State.nivelVoz()!=='full'){U.toast('Comando de voz no cadastro disponivel apenas no Plano Pro','wn');return}
     this._ci=0;
     this._limpar();
     document.getElementById('voz-cad-st').classList.add('on');
@@ -992,7 +1025,12 @@ var Cad={
     btn.classList.add('on');
     btn.textContent='Ouvindo '+(this._ci+1)+'/3...';
     st.textContent='Fale '+(this._ci+1)+'/3: '+campo.label;
-    U.falar('Fale '+campo.label);
+    // Fala instrucao sem acento para soar natural
+    var instrucao=campo.label
+      .replace(/materia/g,'matéria')
+      .replace(/minimo/g,'mínimo')
+      .replace(/numero/g,'número');
+    U.falar('Fale '+instrucao);
     var r=new SR();
     r.lang='pt-BR';
     r.continuous=false;
@@ -1023,68 +1061,55 @@ var Cad={
   _preencher:function(campo,txt){
     var st=document.getElementById('voz-cad-st');
     var self=this;
+    var val='';
 
     if(campo.tipo==='texto'){
-      var val=U.cap(txt);
+      // Nome: capitaliza cada palavra
+      val=U.cap(txt);
       document.getElementById(campo.id).value=val;
-      st.textContent='OK '+(this._ci+1)+'/3: '+val;
-      U.falar(val);
 
     } else if(campo.tipo==='numero'){
       // Converte palavras para numeros
       var t2=txt.toLowerCase()
-        .replace(/mil/g,'1000')
-        .replace(/novecentos?/g,'900').replace(/oitocentos?/g,'800')
-        .replace(/setecentos?/g,'700').replace(/seiscentos?/g,'600')
-        .replace(/quinhentos?/g,'500').replace(/quatrocentos?/g,'400')
-        .replace(/trezentos?/g,'300').replace(/duzentos?/g,'200')
-        .replace(/cento\s+e\s+\w+/g,function(m){
-          var n=m.replace('cento','100').replace(/\s+e\s+/,'');
-          return n;
-        })
-        .replace(/cem/g,'100').replace(/noventa/g,'90')
-        .replace(/oitenta/g,'80').replace(/setenta/g,'70')
-        .replace(/sessenta/g,'60').replace(/cinquenta/g,'50')
-        .replace(/quarenta/g,'40').replace(/trinta/g,'30')
-        .replace(/vinte\s+e\s+(\w+)/g,'2$1').replace(/vinte/g,'20')
-        .replace(/quinze/g,'15').replace(/quatorze/g,'14')
-        .replace(/treze/g,'13').replace(/doze/g,'12')
-        .replace(/onze/g,'11').replace(/dez/g,'10')
-        .replace(/nove/g,'9').replace(/oito/g,'8')
-        .replace(/sete/g,'7').replace(/seis/g,'6')
-        .replace(/cinco/g,'5').replace(/quatro/g,'4')
-        .replace(/tr[eê]s/g,'3').replace(/dois?/g,'2')
-        .replace(/hum|um/g,'1').replace(/zero/g,'0');
-      // Pega todos os numeros e soma (ex: "quinhentos gramas" = 500)
+        .replace(/mil/g,' 1000 ')
+        .replace(/novecentos?/g,' 900 ').replace(/oitocentos?/g,' 800 ')
+        .replace(/setecentos?/g,' 700 ').replace(/seiscentos?/g,' 600 ')
+        .replace(/quinhentos?/g,' 500 ').replace(/quatrocentos?/g,' 400 ')
+        .replace(/trezentos?/g,' 300 ').replace(/duzentos?/g,' 200 ')
+        .replace(/cem/g,' 100 ').replace(/noventa/g,' 90 ')
+        .replace(/oitenta/g,' 80 ').replace(/setenta/g,' 70 ')
+        .replace(/sessenta/g,' 60 ').replace(/cinquenta/g,' 50 ')
+        .replace(/quarenta/g,' 40 ').replace(/trinta/g,' 30 ')
+        .replace(/vinte/g,' 20 ').replace(/quinze/g,' 15 ')
+        .replace(/quatorze/g,' 14 ').replace(/treze/g,' 13 ')
+        .replace(/doze/g,' 12 ').replace(/onze/g,' 11 ')
+        .replace(/dez/g,' 10 ').replace(/nove/g,' 9 ')
+        .replace(/oito/g,' 8 ').replace(/sete/g,' 7 ')
+        .replace(/seis/g,' 6 ').replace(/cinco/g,' 5 ')
+        .replace(/quatro/g,' 4 ').replace(/tr[eê]s/g,' 3 ')
+        .replace(/dois?|duas/g,' 2 ').replace(/hum|uma?/g,' 1 ')
+        .replace(/zero/g,' 0 ');
       var nums=t2.match(/\d+/g);
-      var val=0;
-      if(nums){
-        // Se tem numero grande (>100) nao soma, pega o maior
-        var grande=nums.filter(function(n){return parseInt(n)>=100});
-        if(grande.length>0){
-          val=parseInt(grande[0]);
-        } else {
-          nums.forEach(function(n){val+=parseInt(n)});
-        }
-      }
-      if(val>0){
+      if(nums&&nums.length>0){
+        // Pega o maior numero encontrado
+        val=Math.max.apply(null,nums.map(function(n){return parseInt(n)}));
         document.getElementById(campo.id).value=val;
-        st.textContent='OK '+(this._ci+1)+'/3: '+val;
-        U.falar(String(val));
       } else {
-        st.textContent='Nao entendi. Fale: quinhentos, ou 500';
+        st.textContent='Nao entendi. Fale um numero. Ex: quinhentos';
         setTimeout(function(){self._ouvir()},800);
         return;
       }
     }
 
-    // Avanca para proximo campo
+    // Confirma e avanca
+    st.textContent='OK '+(this._ci+1)+'/3: '+val+' confirmado!';
+    U.falar(String(val));
     this._ci++;
     if(this._ci<this._campos.length){
       setTimeout(function(){self._ouvir()},400);
     } else {
-      st.textContent='Nome, quantidade e minimo preenchidos! Agora informe o LOTE e VALIDADE e toque em Cadastrar.';
-      U.falar('Quase pronto! Informe o lote e a validade.');
+      st.textContent='Nome, quantidade e minimo preenchidos! Agora informe o LOTE e VALIDADE e cadastre.';
+      U.falar('Pronto! Informe o lote e a validade.');
     }
   },
 
